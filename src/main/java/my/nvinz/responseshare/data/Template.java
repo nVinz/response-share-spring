@@ -1,5 +1,8 @@
 package my.nvinz.responseshare.data;
 
+import my.nvinz.responseshare.data.enums.RequestLanguageType;
+import my.nvinz.responseshare.data.enums.RequestMethodType;
+
 import javax.persistence.*;
 
 @Entity
@@ -10,13 +13,11 @@ public class Template {
     @Column(name="template_id")
     private String templateId;
 
-    @ManyToOne
-    @JoinColumn(name = "request_method_id")
-    private RequestMethod requestMethod;
+    @Enumerated(EnumType.STRING)
+    private RequestMethodType requestMethod;
 
-    @ManyToOne
-    @JoinColumn(name = "request_language_id")
-    private RequestMethod requestLanguage;
+    @Enumerated(EnumType.STRING)
+    private RequestLanguageType requestLanguage;
 
     private String description;
 }

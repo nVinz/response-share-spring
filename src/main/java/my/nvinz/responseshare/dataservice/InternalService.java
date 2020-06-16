@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class InternalService implements RequestService {
@@ -35,6 +36,25 @@ public class InternalService implements RequestService {
     @Override
     public Request getRequestById(String id) {
         return requestRepository.findById(id).orElse(null);
+    }
+
+    /***
+     * Gets amount of all Requests in DB
+     * @return count
+     */
+    public long getRequestCount() {
+        return requestRepository.count();
+    }
+
+    /***
+     * Gets active requests from DB
+     * @return list of active Requests
+     */
+    public List<Request> getActiveRequests() {
+        return getAllRequests().stream()
+                .filter(Objects::nonNull)
+                .filter(Request::getActive)
+                .collect(Collectors.toList());
     }
 
     /***

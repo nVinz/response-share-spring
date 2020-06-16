@@ -1,18 +1,14 @@
 package my.nvinz.responseshare.dataservice;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import my.nvinz.responseshare.data.Request;
 import my.nvinz.responseshare.datarepository.RequestRepository;
-import org.everit.json.schema.ValidationException;
-import org.everit.json.schema.loader.SchemaLoader;
+import my.nvinz.responseshare.tools.JsonUtils;
+import my.nvinz.responseshare.tools.XmlUtils;
 import org.json.JSONObject;
-import org.json.JSONTokener;
-import org.everit.json.schema.Schema;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.ZonedDateTime;
 import java.util.*;
 
 @Service
@@ -34,7 +30,7 @@ public class APIService implements RequestService {
 
     /***
      * Gets specified Request from DB
-     * @param id request name
+     * @param id Request name
      * @return Request if it exists, else null
      */
     @Override
@@ -43,131 +39,66 @@ public class APIService implements RequestService {
     }
 
     /***
-     * Checks if given request valid to schema (JSON)
-     * @param id Request name
-     * @param stringRequest Request's request
-     * @return existence
+     * Update data when Request called
+     * Also set status to Active
+     * @param storedRequest Request id in DB
      */
-    public boolean validateRqToJsonSchema(String id, String stringRequest) {
-        Request storedRequest = getRequestById(id);
-        JSONObject jsonRequest = new JSONObject(stringRequest);
-        JSONObject requestRawSchema = new JSONObject(new JSONTokener(storedRequest.getRequestSchema()));
-        Schema requestSchema = SchemaLoader.load(requestRawSchema);
+    public void updateCallData(Request storedRequest){
+        ZonedDateTime currentTime = ZonedDateTime.now();
 
-        try {
-            requestSchema.validate(jsonRequest);
-            return true;
-        } catch (ValidationException e) {
-            System.out.println("[VALIDATION ERROR]: [" + id + "] - request schema: " + e.getMessage());
-            return false;
+        storedRequest.setLastCall(currentTime);
+        storedRequest.setActive(true);
+
+        if (storedRequest.getCallCount() != null) {
+            storedRequest.setCallCount(storedRequest.getCallCount() + 1);
         }
+        else {
+            storedRequest.setCallCount(1);
+        }
+
+        internalService.addRequest(storedRequest);
+    }
+
+    /***
+     * Checks if given request is JSON language
+     * @param requestBody request body
+     * @return is JSON or not
+     */
+    public boolean isRequestBodyValid(String requestBody) {
+        if (JsonUtils.isJson(requestBody)) {
+            return true;
+        }
+        else if (XmlUtils.isXml(requestBody)) {
+            return true;
+        }
+        return false;
+    }
+
+    /***
+     * Checks if given request valid to schema (JSON)
+     * @param storedRequest Request in DB
+     * @param requestBody request to Request
+     * @return is scheme valid or not
+     */
+    public boolean validateRequestBodyToSchema(Request storedRequest, String requestBody) {
+        return JsonUtils.validateRequestBodyToSchema(storedRequest, requestBody);
     }
 
     /***
      * Creates response from json schema
-     * @param id Response id
+     * @param storedRequest Request id DB
      * @return json response
      */
-    public JSONObject createRsJson(String id) {
-        // Get Response from DB
-        Request storedRequest = getRequestById(id);
+    public JSONObject createRsJson(Request storedRequest) {
+        // If Request doesn't have a response schema id DB
+        if (storedRequest.getResponseSchema() == null) {
+            JSONObject response = new JSONObject();
+            response.put("ERROR", "response schema is empty");
+            return response;
+        }
         // Create Map of all json attributes from Request's response json schema
-        Map<String, Object> elementsMap = parseRsSchemaJson(storedRequest);
+        Map<String, Object> elementsMap = JsonUtils.parseRsSchemaJson(storedRequest);
         // Create json with attributes and values
-        return setRsValuesJson(elementsMap);
-    }
-
-    /***
-     * Fills json object with all attributes and values from response schema
-     * @param elementsMap Map from parseRsSchemaJson(Request request)
-     * @return json response
-     */
-    private JSONObject setRsValuesJson(Map<String, Object> elementsMap) {
-        Iterator<Map.Entry<String, Object>> fieldsIterator = elementsMap.entrySet().iterator();
-        JSONObject response = new JSONObject();
-
-        while (fieldsIterator.hasNext()) {
-            Map.Entry<String, Object> field = fieldsIterator.next();
-
-            // Has nested attribute(s)
-            if (field.getValue() instanceof Map) {
-                response.put(field.getKey(), setRsValuesJson((Map<String, Object>) field.getValue()));
-            }
-            // Array if example values in attribute
-            else if (field.getValue() instanceof List) {
-                List<Object> exampleValues = (List) field.getValue();
-                int index = new Random().nextInt(exampleValues.size());
-                response.put(field.getKey(), exampleValues.get(index));
-            }
-            // Simple attribute
-            else {
-                response.put(field.getKey(), field.getValue());
-            }
-        }
-
-        return response;
-    }
-
-    /***
-     * Parses response json schema from existing request
-     * and creates Map with attribute-value key set
-     * @param request Request in DB
-     * @return map of all json schema values
-     * HashMap in map values for complex values
-     */
-    private Map<String, Object> parseRsSchemaJson(Request request) {
-        ObjectMapper objectMapper = new ObjectMapper(new JsonFactory());
-        Map<String, Object> elementsMap = new HashMap<>();
-
-        try {
-            JsonNode rootNode = objectMapper.readTree(request.getResponseSchema());
-            elementsMap = getAttributesJsonSchema(rootNode.get("properties"));
-        } catch (Exception e) {
-            System.out.println("[PARSING ERROR]: [" + request.getId() + "] - response schema: " + e.getMessage());
-        }
-
-        return elementsMap;
-    }
-
-    /***
-     * Creates Map with all attributes and values from json schema
-     * @param rootNode main json node
-     * @return Map with attribute-value key set
-     */
-    private Map<String, Object> getAttributesJsonSchema(JsonNode rootNode) {
-        Map<String, Object> elementsMap = new HashMap<>();
-        Iterator<Map.Entry<String, JsonNode>> fieldsIterator = rootNode.fields();
-
-        while (fieldsIterator.hasNext()) {
-            Map.Entry<String, JsonNode> field = fieldsIterator.next();
-
-            // Array of attributes
-            if (field.getValue().get("type").toString().contains("array")) {
-                List<Map<String, Object>> objectArray = new ArrayList<>();
-                JsonNode itemsNode = field.getValue().get("items").get("properties");
-                objectArray.add(getAttributesJsonSchema(itemsNode));
-                elementsMap.put(field.getKey(), objectArray);
-            }
-            // Complex attribute
-            else if (field.getValue().get("type").toString().contains("object")) {
-                elementsMap.put(field.getKey(), getAttributesJsonSchema(field.getValue().get("properties")));
-            }
-            // Simple attribute
-            else {
-                if (field.getValue().get("examples") != null) {
-                    List<String> examples = Arrays.asList(
-                            field.getValue().get("examples").toString()
-                                .replace("[", "")
-                                .replace("]", "")
-                                .split(","));
-                    elementsMap.put(field.getKey(), examples);
-                }
-                else {
-                    elementsMap.put(field.getKey(), field.getValue().get("default"));
-                }
-            }
-        }
-
-        return elementsMap;
+        return JsonUtils.setRsValuesJson(elementsMap);
     }
 }

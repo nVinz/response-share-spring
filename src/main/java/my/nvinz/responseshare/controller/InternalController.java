@@ -1,5 +1,6 @@
 package my.nvinz.responseshare.controller;
 
+import my.nvinz.responseshare.threads.MainThread;
 import my.nvinz.responseshare.data.Request;
 import my.nvinz.responseshare.dataservice.InternalService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,12 +14,26 @@ import java.util.List;
 @CrossOrigin(maxAge = 3600)
 public class InternalController {
 
+    private InternalService internalService;
+
     @Autowired
-    InternalService internalService;
+    public InternalController(MainThread mainThread) {
+        this.internalService = mainThread.getInternalService();
+    }
 
     @RequestMapping(path = "/requests", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
     public List<Request> getAllRequests() {
         return internalService.getAllRequests();
+    }
+
+    @RequestMapping(path = "/requests_count", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
+    public long getAllRequestsCount() {
+        return internalService.getRequestCount();
+    }
+
+    @RequestMapping(path = "/requests_active", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<Request> getActiveRequests() {
+        return internalService.getActiveRequests();
     }
 
     @RequestMapping(path = "/requests_names", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
